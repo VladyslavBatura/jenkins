@@ -1,0 +1,660 @@
+{
+	"info": {
+		"_postman_id": "70cce851-56bc-42e5-a4de-4e426896b1ea",
+		"name": "QA auto API Tests Complete (Optimized)",
+		"description": "Колекція для тестування додатку QA auto з покращеними перевірками. Використовується data-driven підхід для тестування валідації полів (як позитивних, так і негативних кейсів) одним запитом. Запити перевіряють: JSON schema, формат email, відповідність даних у запиті та відповіді (update profile), перевірку userId при зміні пароля, а також зростання вартості витрат. Колекцію можна запускати в різних середовищах (qauto та qauto2) за допомогою Collection Runner або Newman.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "40260309"
+	},
+	"item": [
+		{
+			"name": "User Tests",
+			"item": [
+				{
+					"name": "Create User - Field Validation",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Якщо використовуємо data-driven, можна отримати тестовий кейс із pm.iterationData",
+									"const testCase = pm.iterationData.toObject();",
+									"",
+									"// Якщо в тестових даних не передано значення, генеруємо їх динамічно",
+									"function getRandomString(length, charset) {",
+									"    let result = '';",
+									"    for (let i = 0; i < length; i++) {",
+									"        result += charset.charAt(Math.floor(Math.random() * charset.length));",
+									"    }",
+									"    return result;",
+									"}",
+									"",
+									"function generateName(min, max) {",
+									"    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';",
+									"    const length = Math.floor(Math.random() * (max - min + 1)) + min;",
+									"    return getRandomString(length, charset);",
+									"}",
+									"",
+									"function generateEmail() {",
+									"    const domains = ['example.com', 'test.com', 'mail.com'];",
+									"    const username = generateName(5, 10).toLowerCase();",
+									"    const domain = domains[Math.floor(Math.random() * domains.length)];",
+									"    return `${username}@${domain}`;",
+									"}",
+									"",
+									"pm.environment.set('nameInput', testCase.nameInput || generateName(2, 20));",
+									"pm.environment.set('lastNameInput', testCase.lastNameInput || generateName(2, 20));",
+									"pm.environment.set('emailInput', testCase.emailInput || generateEmail());",
+									"pm.environment.set('passwordInput', testCase.passwordInput || 'Qwerty12345');"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"// JSON Schema перевірка",
+									"const schema = {",
+									"  type: 'object',",
+									"  required: ['status', 'data'],",
+									"  properties: {",
+									"    status: { type: 'string' },",
+									"    data: {",
+									"      type: 'object',",
+									"      required: ['userId', 'photoFilename', 'distanceUnits', 'currency'],",
+									"      properties: {",
+									"        userId: { type: 'number' },",
+									"        photoFilename: { type: 'string' },",
+									"        distanceUnits: { type: 'string' },",
+									"        currency: { type: 'string' }",
+									"      }",
+									"    }",
+									"  }",
+									"};",
+									"pm.test('Response matches JSON schema', function () {",
+									"    pm.response.to.have.jsonSchema(schema);",
+									"});",
+									"",
+									"// Перевірка формату email",
+									"const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;",
+									"const email = pm.environment.get('emailInput');",
+									"pm.test('Email is valid', function () {",
+									"    pm.expect(email).to.match(emailRegex);",
+									"});",
+									"",
+									"var jsonData = pm.response.json();",
+									"if (jsonData.status === 'error') {",
+									"  pm.test('Error message contains validation info', function () {",
+									"    pm.expect(jsonData.message).to.match(/(порожне|один|декілька)/i);",
+									"  });",
+									"} else {",
+									"  pm.environment.set('userId', jsonData.data.userId);",
+									"  // Витягуємо sid з Set-Cookie",
+									"  var setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"  if (setCookieHeader) {",
+									"    var sidMatch = setCookieHeader.match(/sid=([^;]+)/);",
+									"    if (sidMatch) {",
+									"      pm.environment.set('sid', sidMatch[1]);",
+									"      console.log('sid extracted:', sidMatch[1]);",
+									"    }",
+									"  }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{nameInput}}\",\n  \"lastName\": \"{{lastNameInput}}\",\n  \"email\": \"{{emailInput}}\",\n  \"password\": \"{{passwordInput}}\",\n  \"repeatPassword\": \"{{passwordInput}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/signup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"signup"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Login was successful', function(){",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"if(setCookieHeader) {",
+									"    var sidMatch = setCookieHeader.match(/sid=([^;]+)/);",
+									"    if(sidMatch) {",
+									"         pm.environment.set('sid', sidMatch[1]);",
+									"         console.log('Session ID extracted:', sidMatch[1]);",
+									"    } else {",
+									"         console.log('Cookie sid не знайдено');",
+									"    }",
+									"} else {",
+									"    console.log('Set-Cookie заголовок відсутній');",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{emailInput}}\",\n  \"password\": \"{{passwordInput}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/signin",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"signin"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile - Invalid DateBirth Format",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Should return error for invalid dateBirth format', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.message).to.match(/дата|невір/i);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"photo\": \"user-uploaded.jpg\",\n  \"name\": \"InvalidDateUser\",\n  \"lastName\": \"Test\",\n  \"dateBirth\": 12345,\n  \"country\": \"Ukraine\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"profile"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile - Invalid Email Format",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Should return error for invalid email format', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.message).to.match(/email|невір/i);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"photo\": \"user-uploaded.jpg\",\n  \"name\": \"InvalidEmailUser\",\n  \"lastName\": \"Test\",\n  \"email\": \"not-an-email\",\n  \"dateBirth\": \"{{dateBirth}}\",\n  \"country\": \"Ukraine\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"profile"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update User Profile",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Встановлюємо динамічну дату народження (наприклад, поточну дату)",
+									"pm.environment.set('dateBirth', new Date().toISOString());",
+									"",
+									"function getRandomString(length, charset) {",
+									"    let result = '';",
+									"    for (let i = 0; i < length; i++) {",
+									"        result += charset.charAt(Math.floor(Math.random() * charset.length));",
+									"    }",
+									"    return result;",
+									"}",
+									"",
+									"function generateName(min, max) {",
+									"    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';",
+									"    const length = Math.floor(Math.random() * (max - min + 1)) + min;",
+									"    return getRandomString(length, charset);",
+									"}",
+									"",
+									"pm.environment.set('UpdatedName', generateName(2, 20));",
+									"pm.environment.set('UpdatedLastName', generateName(2, 20));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var reqBody = JSON.parse(pm.request.body.raw);",
+									"var resData = pm.response.json().data;",
+									"pm.test('Profile response matches request data', function(){",
+									"    pm.expect(resData.name).to.eql(reqBody.name);",
+									"    pm.expect(resData.lastName).to.eql(reqBody.lastName);",
+									"    pm.expect(resData.dateBirth).to.eql(reqBody.dateBirth);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"photo\": \"user-uploaded.jpg\",\n  \"name\": \"{{UpdatedName}}\",\n  \"lastName\": \"{{UpdatedLastName}}\",\n  \"dateBirth\": \"{{dateBirth}}\",\n  \"country\": \"Ukraine\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"profile"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Change Password",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.environment.get('initialPassword')) {",
+									"    pm.environment.set('initialPassword', pm.environment.get('passwordInput'));",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"pm.test('Password changed successfully', function(){",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('UserId in response matches created user', function(){",
+									"    pm.expect(jsonData.data.userId).to.eql(pm.environment.get('userId'));",
+									"});",
+									"pm.environment.set('passwordInput', 'NewPassword123');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"oldPassword\": \"{{initialPassword}}\",\n  \"newPassword\": \"NewPassword123\",\n  \"repeatNewPassword\": \"NewPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users/password",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"password"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Car",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"pm.test('Car was successfully created', function () {",
+									"    pm.expect(jsonData.status).to.eql('ok');",
+									"});",
+									"pm.environment.set('carId', jsonData.data.id);",
+									"pm.environment.set('carBrandId', jsonData.data.carBrandId);",
+									"pm.environment.set('carModelId', jsonData.data.carModelId);",
+									"pm.environment.set('mileage', jsonData.data.mileage + 10);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"carBrandId\": 2,\n  \"carModelId\": 6,\n  \"mileage\": 128\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/cars",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"cars"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add Expense",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var currentDate = new Date().toISOString();",
+									"pm.variables.set('currentDate', currentDate);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Expense was successfully created', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"var newExpense = jsonData.data.totalCost;",
+									"var previousExpense = pm.environment.get('previousExpense');",
+									"if(previousExpense) {",
+									"    pm.test('New expense is greater than previous', function(){",
+									"        pm.expect(newExpense).to.be.above(Number(previousExpense));",
+									"    });",
+									"}",
+									"pm.environment.set('previousExpense', newExpense);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"carId\": \"{{carId}}\",\n  \"reportedAt\": \"{{currentDate}}\",\n  \"mileage\": {{mileage}},\n  \"liters\": 11,\n  \"totalCost\": 11,\n  \"forceMileage\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/expenses",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"expenses"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Car",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Car was successfully deleted', function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/cars/{{carId}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"cars",
+								"{{carId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Logout succeeded', function(){",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.environment.unset('sid');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/auth/signout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"signout"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('User account was successfully deleted', function(){",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "sid={{sid}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://qauto.forstudy.space"
+		},
+		{
+			"key": "guest_login",
+			"value": "guest"
+		},
+		{
+			"key": "guest_password",
+			"value": "welcome2qauto"
+		}
+	]
+}
