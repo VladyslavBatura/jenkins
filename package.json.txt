@@ -1,0 +1,11 @@
+{
+  "name": "api-tests",
+  "scripts": {
+    "test:dev": "newman run collection.json -e env.dev.json --reporters cli,html --reporter-html-export newman-dev-report.html",
+    "test:staging": "newman run collection.json -e env.staging.json --reporters cli,html --reporter-html-export newman-staging-report.html"
+  },
+  "dependencies": {
+    "newman": "^5.0.0",
+    "newman-reporter-html": "^1.0.0"
+  }
+}
